@@ -89,20 +89,32 @@ void tb_pprintf(Termbuffer *tb, int row, int col, const char *format, ...) {
   int bytes_to_copy =
       (required_size < left_in_row) ? required_size : left_in_row - 1;
 
+  // manually copy this, since we need to skip newlines, as they'll mess up our
+  // buffer. later on, we could also handle other escape codes.
+  int j = 0;
   int pos = col + (row * tb->col);
-  memcpy(&tb->buf[pos], buf, bytes_to_copy);
+  for (int i = 0; i < bytes_to_copy; ++i) {
+    if (buf[i] < 32) {
+      // this is a control character, just ignore it.
+    } else {
+      // if we haven't hit a funny character, just place it into the buffer.
+      tb->buf[pos + j] = buf[i];
+      j++;
+    }
+  }
 
-  tb->last_written_pos = bytes_to_copy + pos + 1;
+  tb->last_written_pos = j + pos + 1;
 
   va_end(args);
 }
 
 // print out all the characters in the framebuffer.
 void tb_draw(Termbuffer *tb) {
-  move_cursor(0, 0);
-  fflush(stdout);
-
+  // make sure all the ansi codes from last pass aren't still affecting this
+  // one.
   system("clear");
+
+  move_cursor(0, 0);
 
   int last_offset = 0;
   int ansi_offset =
@@ -144,9 +156,9 @@ void tb_draw(Termbuffer *tb) {
         CASES(WHITE)
         CASES(BLACK)
 
-#undef CASE
-#undef BGCASE
 #undef CASES
+#undef BGCASE
+#undef CASE
 
       case TC_RESET: {
         code_string = ANSI_RESET;
@@ -176,14 +188,15 @@ void tb_draw(Termbuffer *tb) {
 
   // then, print the rest after the last command.
   printf("%s", &tb->buf[last_offset]);
-
-  // we've used up all the commands, reset them for the next draw.
-  tb->num_commands = 0;
+  fflush(stdout);
 
   tb->buf[tb->len] = '\0';
 }
 
 void tb_clear(Termbuffer *tb) {
+  // we've used up all the commands, reset them for the next draw.
+  tb->num_commands = 0;
+
   for (int i = 0; i < tb->len; i++) {
     tb->buf[i] = ' ';
   }
