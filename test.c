@@ -47,10 +47,9 @@ int main(int argc, char *argv[]) {
 
   tb.handler = more_stuff;
 
-  more_stuff();
-
   for (;;) {
-    usleep(1000);
+    more_stuff();
+    usleep(100000);
   }
 
   return 0;

@@ -196,6 +196,7 @@ void tb_draw(Termbuffer *tb) {
 void tb_clear(Termbuffer *tb) {
   // we've used up all the commands, reset them for the next draw.
   tb->num_commands = 0;
+  tb->last_written_pos = 0;
 
   for (int i = 0; i < tb->len; i++) {
     tb->buf[i] = ' ';
