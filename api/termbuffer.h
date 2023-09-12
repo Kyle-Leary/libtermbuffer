@@ -2,6 +2,8 @@
 
 // these are basically just wrappers around the ANSI codes.
 typedef enum TermColor {
+  TC_RESET = 0, // DO NOT CHANGE THIS ORDER.
+
   TC_RED,
   TC_GREEN,
   TC_YELLOW,
@@ -19,8 +21,6 @@ typedef enum TermColor {
   TC_BG_CYAN,
   TC_BG_WHITE,
   TC_BG_BLACK,
-
-  TC_RESET,
 
   TC_COUNT,
 } TermColor;

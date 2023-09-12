@@ -14,32 +14,53 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-void swap(TermCommand *a_cmd_ptr, TermCommand *b_cmd_ptr) {
+static void _swap(TermCommand *a_cmd_ptr, TermCommand *b_cmd_ptr) {
   TermCommand temp;
   memcpy(&temp, a_cmd_ptr, sizeof(TermCommand));
   memcpy(a_cmd_ptr, b_cmd_ptr, sizeof(TermCommand));
   memcpy(b_cmd_ptr, &temp, sizeof(TermCommand));
 }
 
-int partition(TermCommand *cmds, int low, int high) {
+// we need to weigh certain commands higher than others, so use a proper
+// calculation that adds onto the cmd->offset. for instance, if there are two
+// commands on the same offset, the RESET should come before the other color
+// command.
+static int _get_command_value(TermCommand *cmd) {
+  int value = cmd->offset;
+  value *= 1000;
+  switch (cmd->type) {
+  case COMTYPE_COLOR: {
+    // the reset command has the lowest value assignment in the enum.
+    // this way, any other color will be preferred over a reset command.
+    value += cmd->data.color;
+  } break;
+
+  default: {
+    // then just compare offsets, that's fine.
+  } break;
+  }
+  return value;
+}
+
+static int _partition(TermCommand *cmds, int low, int high) {
   // comparing offsets.
-  int pivot = cmds[high].offset;
+  int pivot = _get_command_value(&cmds[high]);
   int i = low - 1;
 
   for (int j = low; j <= high - 1; j++) {
-    if (cmds[j].offset < pivot) {
+    if (_get_command_value(&cmds[j]) < pivot) {
       i++;
-      swap(&cmds[i], &cmds[j]);
+      _swap(&cmds[i], &cmds[j]);
     }
   }
 
-  swap(&cmds[i + 1], &cmds[high]);
+  _swap(&cmds[i + 1], &cmds[high]);
   return (i + 1);
 }
 
 void quicksort(TermCommand *cmds, int low, int high) {
   if (low < high) {
-    int pi = partition(cmds, low, high);
+    int pi = _partition(cmds, low, high);
 
     quicksort(cmds, low, pi - 1);
     quicksort(cmds, pi + 1, high);
