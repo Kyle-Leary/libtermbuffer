@@ -11,6 +11,41 @@
 #include "macros.h"
 #include "termbuffer.h"
 
+#include <stdio.h>
+#include <stdlib.h>
+
+void swap(TermCommand *a_cmd_ptr, TermCommand *b_cmd_ptr) {
+  TermCommand temp;
+  memcpy(&temp, a_cmd_ptr, sizeof(TermCommand));
+  memcpy(a_cmd_ptr, b_cmd_ptr, sizeof(TermCommand));
+  memcpy(b_cmd_ptr, &temp, sizeof(TermCommand));
+}
+
+int partition(TermCommand *cmds, int low, int high) {
+  // comparing offsets.
+  int pivot = cmds[high].offset;
+  int i = low - 1;
+
+  for (int j = low; j <= high - 1; j++) {
+    if (cmds[j].offset < pivot) {
+      i++;
+      swap(&cmds[i], &cmds[j]);
+    }
+  }
+
+  swap(&cmds[i + 1], &cmds[high]);
+  return (i + 1);
+}
+
+void quicksort(TermCommand *cmds, int low, int high) {
+  if (low < high) {
+    int pi = partition(cmds, low, high);
+
+    quicksort(cmds, low, pi - 1);
+    quicksort(cmds, pi + 1, high);
+  }
+}
+
 static Termbuffer *winched_tb = NULL;
 
 static void sigwinch(int signal) {
@@ -54,8 +89,6 @@ void tb_handle_resize(Termbuffer *tb) {
       tb->buf = realloc(tb->buf, tb->len);
     }
   }
-
-  printf("new sz: %d\n", tb->len);
 }
 
 void tb_init(Termbuffer *tb) {
@@ -71,12 +104,32 @@ void tb_init(Termbuffer *tb) {
   signal(SIGWINCH, sigwinch);
 }
 
-void tb_pprintf(Termbuffer *tb, int row, int col, const char *format, ...) {
-  RUNTIME_ASSERT(row >= 0);
-  RUNTIME_ASSERT(row < tb->row);
-  RUNTIME_ASSERT(col >= 0);
-  RUNTIME_ASSERT(col < tb->col);
+int tb_write(Termbuffer *tb, int row, int col, int num_chars, const char *str) {
+  if (row < 0 || col < 0 || row >= tb->row || col >= tb->col) {
+    // oob write, just block it for now.
+    return 0;
+  }
 
+  // manually copy this, since we need to skip newlines, as they'll mess up our
+  // buffer. later on, we could also handle other escape codes.
+  int j = 0;
+  int pos = col + (row * tb->col);
+  for (int i = 0; i < num_chars; ++i) {
+    if (str[i] < 32) {
+      // this is a control character, just ignore it.
+    } else {
+      // if we haven't hit a funny character, just place it into the buffer.
+      tb->buf[pos + j] = str[i];
+      j++;
+    }
+  }
+
+  tb->last_written_pos = j + pos + 1;
+
+  return j;
+}
+
+void tb_pprintf(Termbuffer *tb, int row, int col, const char *format, ...) {
   // how many columns do we have left in the current row?
   int left_in_row = tb->col - col;
   char buf[left_in_row];
@@ -89,21 +142,7 @@ void tb_pprintf(Termbuffer *tb, int row, int col, const char *format, ...) {
   int bytes_to_copy =
       (required_size < left_in_row) ? required_size : left_in_row - 1;
 
-  // manually copy this, since we need to skip newlines, as they'll mess up our
-  // buffer. later on, we could also handle other escape codes.
-  int j = 0;
-  int pos = col + (row * tb->col);
-  for (int i = 0; i < bytes_to_copy; ++i) {
-    if (buf[i] < 32) {
-      // this is a control character, just ignore it.
-    } else {
-      // if we haven't hit a funny character, just place it into the buffer.
-      tb->buf[pos + j] = buf[i];
-      j++;
-    }
-  }
-
-  tb->last_written_pos = j + pos + 1;
+  tb_write(tb, row, col, bytes_to_copy, buf);
 
   va_end(args);
 }
@@ -120,6 +159,11 @@ void tb_draw(Termbuffer *tb) {
   int ansi_offset =
       0; // count up the offsets that all the commands generate in the text, so
          // that we can keep writing to the proper place.
+
+  quicksort(
+      tb->commands, 0,
+      tb->num_commands); // make sure that all the command offsets are in order.
+
   for (int i = 0; i < tb->num_commands; i++) {
     TermCommand tc = tb->commands[i];
 
@@ -211,6 +255,13 @@ static inline void _append_command(Termbuffer *tb, TermCommand *tc) {
 
 void tb_change_color(Termbuffer *tb, TermColor color) {
   _append_command(tb, &(TermCommand){.offset = tb->last_written_pos,
+                                     .data.color = color,
+                                     .type = COMTYPE_COLOR});
+}
+
+void tb_change_positional_color(Termbuffer *tb, TermColor color, int row,
+                                int col) {
+  _append_command(tb, &(TermCommand){.offset = col + (row * tb->col),
                                      .data.color = color,
                                      .type = COMTYPE_COLOR});
 }

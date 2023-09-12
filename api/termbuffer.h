@@ -72,9 +72,13 @@ void tb_handle_resize(Termbuffer *tb);
 // positional formatting into the buffer. will print on one line (doesn't handle
 // newlines).
 void tb_pprintf(Termbuffer *tb, int row, int col, const char *format, ...);
+// returns the amount of characters written.
+int tb_write(Termbuffer *tb, int row, int col, int num_chars, const char *str);
 
 // add a color command to the list, automatically processed on a draw.
 void tb_change_color(Termbuffer *tb, TermColor color);
+void tb_change_positional_color(Termbuffer *tb, TermColor color, int row,
+                                int col);
 
 // print out all the characters in the framebuffer.
 void tb_draw(Termbuffer *tb);
